@@ -783,8 +783,8 @@ class OpenJDKFrameFilter(object):
             return [ frame ]
         # t("base = frame.inferior_frame()")
         base = frame.inferior_frame()
-        # t("sp = Types.as_long(base.read_register('rsp'))")
-        sp = base.read_register('rsp')
+        # t("sp = Types.as_long(base.read_register('sp'))")
+        sp = base.read_register('sp')
         x = Types.as_long(sp)
         # debug_write("@@ get info at unwindercache[0x%x]\n" % x)
         try:
@@ -1094,11 +1094,11 @@ class OpenJDKUnwinder(Unwinder):
     def call_sub(self, pending_frame):
         # t("OpenJDKUnwinder.__call_sub__")
         # debug_write("@@ reading pending frame registers\n")
-        pc = pending_frame.read_register('rip')
+        pc = pending_frame.read_register('pc')
         # debug_write("@@ pc = 0x%x\n" % Types.as_long(pc))
-        sp = pending_frame.read_register('rsp')
+        sp = pending_frame.read_register('sp')
         # debug_write("@@ sp = 0x%x\n" % Types.as_long(sp))
-        bp = pending_frame.read_register('rbp')
+        bp = pending_frame.read_register('r11')
         # debug_write("@@ bp = 0x%x\n" % Types.as_long(bp))
         try:
             if not CodeCache.inrange(pc):
@@ -1122,10 +1122,10 @@ class OpenJDKUnwinder(Unwinder):
         # Java interpreted frame. it also saves us doing a redundant
         # stack read when the pending frame sits below a non-JITted
         # (C++) frame. n.b. if the current frame is a JITted frame
-        # (i.e. one that we have already unwound) then rbp will not be
+        # (i.e. one that we have already unwound) then r11 will not be
         # present. that's ok because the frame decorator can still
         # find the latest bcp value on the stack.
-        bcp = pending_frame.read_register('r13')
+        bcp = pending_frame.read_register('r5')
         try:
             # convert returned value to a python int to force a check that
             # the register is defined. if not this will except
@@ -1143,7 +1143,7 @@ class OpenJDKUnwinder(Unwinder):
             return None
         # if the blob is an nmethod then we use the frame
         # size to identify the frame base otherwise we
-        # use the value in rbp
+        # use the value in r11
         # t("name = str(blob['_name'])")
         name = str(blob['_name'])
         # blob name will be in format '0xHexDigits "AlphaNumSpaces"'
@@ -1161,7 +1161,7 @@ class OpenJDKUnwinder(Unwinder):
             # what do we do then? use SP as BP???
             frame_size = blob['_frame_size']
             # debug_write("@@ frame_size = 0x%x\n" % int(frame_size))
-            # n.b. frame_size includes stacked rbp and rip hence the -2
+            # n.b. frame_size includes stacked r11 and pc hence the -2
             bp = sp + ((frame_size - 2) * 8)
             # debug_write("@@ revised bp = 0x%x\n" % Types.as_long(bp))
         elif name == "native nmethod":
@@ -1180,10 +1180,12 @@ class OpenJDKUnwinder(Unwinder):
         x = Types.as_long(sp)
         # debug_write("@@ add %s cache entry for blob 0x%x at unwindercache[0x%x]\n" % (codetype, blob, x))
         self.unwindercache[x] = OpenJDKUnwinderCacheEntry(blob, sp, pc, bp, bcp, name, codetype)
-        # t("next_bp = Types.load_long(bp)")
-        next_bp = Types.load_long(bp)
-        # t("next_pc = Types.load_long(bp + 8)")
-        next_pc = Types.load_long(bp + 8)
+        # t("next_bp = Types.load_int(bp - 4)")
+        next_bp = Types.load_int(bp - 4)
+        # t("next_pc = Types.load_int(bp)")
+        next_pc = Types.load_int(bp)
+        next_sp = next_bp - 4
+        """
         # next_sp is normally just 2 words below current bp
         # but for interpreted frames we need to skip locals
         # so we pull caller_sp from the frame
@@ -1194,6 +1196,7 @@ class OpenJDKUnwinder(Unwinder):
         else:
             sender_sp_offset = FrameConstants.sender_sp_offset() * 8
             next_sp = bp + sender_sp_offset
+        """
         # create unwind info for this frame
         # t("frameid = OpenJDKFrameId(...)")
         frameid = OpenJDKFrameId(Types.to_voidp(next_sp),
@@ -1209,9 +1212,9 @@ class OpenJDKUnwinder(Unwinder):
         #
         # for now we only add the minimum of registers that we know
         # are valid.
-        unwind_info.add_saved_register('rip', next_pc)
-        unwind_info.add_saved_register('rsp', next_sp)
-        unwind_info.add_saved_register('rbp', next_bp)
+        unwind_info.add_saved_register('pc', next_pc)
+        unwind_info.add_saved_register('sp', next_sp)
+        unwind_info.add_saved_register('r11', next_bp)
         if _dump_frame:
             debug_write("next pc = 0x%x\n" % Types.as_long(next_pc))
             debug_write("next sp = 0x%x\n" % Types.as_long(next_sp))
