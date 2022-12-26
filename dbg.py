@@ -381,10 +381,12 @@ class FrameConstants(object):
     def class_init(cls):
         if cls.class_inited:
             return
-        cls._interpreter_frame_sender_sp_offset = int(gdb.parse_and_eval("frame::interpreter_frame_sender_sp_offset"))
-        cls._sender_sp_offset = int(gdb.parse_and_eval("frame::sender_sp_offset"))
-        cls._interpreter_frame_method_offset = int(gdb.parse_and_eval("frame::interpreter_frame_method_offset"))
-        cls._interpreter_frame_bcp_offset = int(gdb.parse_and_eval("frame::interpreter_frame_bcp_offset"))
+        apcs = False
+        get_frame_size = 4 if apcs else 2;
+        cls._interpreter_frame_sender_sp_offset = -get_frame_size + int(gdb.parse_and_eval("frame::interpreter_frame_sender_sp_offset"))
+        cls._sender_sp_offset = -get_frame_size + int(gdb.parse_and_eval("frame::sender_sp_offset"))
+        cls._interpreter_frame_method_offset = -get_frame_size + int(gdb.parse_and_eval("frame::interpreter_frame_method_offset"))
+        cls._interpreter_frame_bcp_offset = -get_frame_size + int(gdb.parse_and_eval("frame::interpreter_frame_bcp_offset"))
         # only set if we got here with no errors
         cls.class_inited = True
     @classmethod
@@ -664,13 +666,13 @@ class Method(object):
             klass_path = klass_path[0:dollaridx]
         self.klass_path = klass_path + ".java"
         method_idx = const_method['_name_index']
-        method_sym = (constant_pool_base + (8 * method_idx)).cast(gdb.lookup_type("Symbol").pointer().pointer()).dereference()
+        method_sym = (constant_pool_base + (4 * method_idx)).cast(gdb.lookup_type("Symbol").pointer().pointer()).dereference()
         method_name = method_sym['_body'].cast(gdb.lookup_type("char").pointer())
         method_name_length = int(method_sym['_length'])
         self.method_str =  CodeCache.makestr(method_name_length, method_name)
 
         sig_idx = const_method['_signature_index']
-        sig_sym = (constant_pool_base + (8 * sig_idx)).cast(gdb.lookup_type("Symbol").pointer().pointer()).dereference()
+        sig_sym = (constant_pool_base + (4 * sig_idx)).cast(gdb.lookup_type("Symbol").pointer().pointer()).dereference()
         sig_name = sig_sym['_body'].cast(gdb.lookup_type("char").pointer())
         sig_name_length = int(sig_sym['_length'])
         sig_str = CodeCache.makestr(sig_name_length, sig_name)
@@ -812,7 +814,15 @@ class OpenJDKFrameFilter(object):
             return [ frame ]
 
     def flatten(self, list_of_lists):
-        return [x for y in list_of_lists for x in y ]
+        #return [x for y in list_of_lists for x in y ]
+        retval = []
+        try:
+            for y in list_of_lists:
+                for x in y:
+                    retval.append(x)
+        except Exception as arg:
+            print(arg)
+        return retval
 
     def filter(self, frame_iter):
         # return map(self.maybe_wrap_frame, frame_iter)
@@ -975,18 +985,18 @@ class InterpretedMethodInfo(JavaMethodInfo):
     def __init__(self, entry, bcp):
         super(InterpretedMethodInfo,self).__init__(entry)
         # interpreter frames store methodptr in slot 3
-        methodptr_offset = FrameConstants.interpreter_frame_method_offset() * 8
-        methodptr_addr = gdb.Value((self.bp + methodptr_offset) & 0xffffffffffffffff)
+        methodptr_offset = FrameConstants.interpreter_frame_method_offset() * 4
+        methodptr_addr = gdb.Value((self.bp + methodptr_offset) & 0xffffffff)
         methodptr_slot = methodptr_addr.cast(gdb.lookup_type("Method").pointer().pointer())
         self.methodptr = methodptr_slot.dereference()
         # bytecode immediately follows const method
         const_method = self.methodptr['_constMethod']
         bcbase = Types.cast_bytep(const_method + 1)
         # debug_write("@@ bcbase = 0x%x\n" % Types.as_long(bcbase))
-        bcp_offset = FrameConstants.interpreter_frame_bcp_offset() * 8
+        bcp_offset = FrameConstants.interpreter_frame_bcp_offset() * 4
         if bcp is None:
             # interpreter frames store bytecodeptr in slot 8
-            bcp_addr = gdb.Value((self.bp + bcp_offset) & 0xffffffffffffffff)
+            bcp_addr = gdb.Value((self.bp + bcp_offset) & 0xffffffff)
             bcp_val = Types.cast_bytep(Types.load_ptr(bcp_addr))
         else:
             bcp_val =  Types.cast_bytep(bcp)
@@ -995,7 +1005,7 @@ class InterpretedMethodInfo(JavaMethodInfo):
             bcoff = Types.as_long(bcp_val - bcbase)
             if bcoff < 0 or bcoff >= 0x10000:
                 # use the value in the frame slot
-                bcp_addr = gdb.Value((self.bp + bcp_offset) & 0xffffffffffffffff)
+                bcp_addr = gdb.Value((self.bp + bcp_offset) & 0xffffffff)
                 bcp_val = Types.cast_bytep(Types.load_ptr(bcp_addr))
         self.bcoff = Types.as_long(bcp_val - bcbase)
         # debug_write("@@ bcoff = 0x%x\n" % self.bcoff)
@@ -1162,7 +1172,7 @@ class OpenJDKUnwinder(Unwinder):
             frame_size = blob['_frame_size']
             # debug_write("@@ frame_size = 0x%x\n" % int(frame_size))
             # n.b. frame_size includes stacked r11 and pc hence the -2
-            bp = sp + ((frame_size - 2) * 8)
+            bp = sp + ((frame_size - 2) * 4)
             # debug_write("@@ revised bp = 0x%x\n" % Types.as_long(bp))
         elif name == "native nmethod":
             # debug_write("@@ native %s \n" % name)
