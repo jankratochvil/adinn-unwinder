@@ -381,7 +381,8 @@ class FrameConstants(object):
     def class_init(cls):
         if cls.class_inited:
             return
-        apcs = False
+        # FrameAPCS would blow up anyway: Internal Error (sharedRuntime_aarch32.cpp:142)
+        apcs = int(gdb.parse_and_eval("FrameAPCS"))
         get_frame_size = 4 if apcs else 2;
         cls._interpreter_frame_sender_sp_offset = -get_frame_size + int(gdb.parse_and_eval("frame::interpreter_frame_sender_sp_offset"))
         cls._sender_sp_offset = -get_frame_size + int(gdb.parse_and_eval("frame::sender_sp_offset"))
