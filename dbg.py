@@ -1196,16 +1196,18 @@ class OpenJDKUnwinder(Unwinder):
         # t("next_pc = Types.load_int(bp)")
         next_pc = Types.load_int(bp)
         next_sp = next_bp - 4
+        # !!! __call__ oops The value of the register returned by the Python sniffer has unexpected size: 8 instead of 4. !!!
+        next_sp = next_sp.cast(gdb.lookup_type('int'))
         """
         # next_sp is normally just 2 words below current bp
         # but for interpreted frames we need to skip locals
         # so we pull caller_sp from the frame
         if codetype == "interpreted":
-            interpreter_frame_sender_sp_offset = FrameConstants.interpreter_frame_sender_sp_offset() * 8
+            interpreter_frame_sender_sp_offset = FrameConstants.interpreter_frame_sender_sp_offset() * 4
             # interpreter frames store sender sp in slot 1
-            next_sp = Types.load_long(bp + interpreter_frame_sender_sp_offset)
+            next_sp = Types.load_int(bp + interpreter_frame_sender_sp_offset)
         else:
-            sender_sp_offset = FrameConstants.sender_sp_offset() * 8
+            sender_sp_offset = FrameConstants.sender_sp_offset() * 4
             next_sp = bp + sender_sp_offset
         """
         # create unwind info for this frame
