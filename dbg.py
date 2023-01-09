@@ -53,8 +53,8 @@ class Types(object):
     # cache some basic primitive and pointer types
     byte_t = gdb.lookup_type('unsigned char')
     char_t = gdb.lookup_type('char')
-    int_t = gdb.lookup_type('int')
-    long_t = gdb.lookup_type('long')
+    int_t = gdb.lookup_type('unsigned int')
+    long_t = gdb.lookup_type('unsigned long')
     void_t = gdb.lookup_type('void')
     
     bytep_t = byte_t.pointer()
@@ -1191,25 +1191,26 @@ class OpenJDKUnwinder(Unwinder):
         x = Types.as_long(sp)
         # debug_write("@@ add %s cache entry for blob 0x%x at unwindercache[0x%x]\n" % (codetype, blob, x))
         self.unwindercache[x] = OpenJDKUnwinderCacheEntry(blob, sp, pc, bp, bcp, name, codetype)
-        # t("next_bp = Types.load_int(bp - 4)")
-        next_bp = Types.load_int(bp - 4)
-        # t("next_pc = Types.load_int(bp)")
-        next_pc = Types.load_int(bp)
-        next_sp = next_bp - 4
-        # !!! __call__ oops The value of the register returned by the Python sniffer has unexpected size: 8 instead of 4. !!!
-        next_sp = next_sp.cast(gdb.lookup_type('int'))
-        """
-        # next_sp is normally just 2 words below current bp
-        # but for interpreted frames we need to skip locals
-        # so we pull caller_sp from the frame
-        if codetype == "interpreted":
-            interpreter_frame_sender_sp_offset = FrameConstants.interpreter_frame_sender_sp_offset() * 4
+        if not codetype == "compiled":
+            # interpreter_frame_sender_sp_offset = FrameConstants.interpreter_frame_sender_sp_offset() * 4
             # interpreter frames store sender sp in slot 1
-            next_sp = Types.load_int(bp + interpreter_frame_sender_sp_offset)
-        else:
+            # interpreter_frame_sender_sp_offset=-8
+            #next_sp = Types.load_int(bp + interpreter_frame_sender_sp_offset)
+            # t("next_bp = Types.load_int(bp - 4)")
+            next_bp = Types.load_int(bp - 4)
+            # t("next_pc = Types.load_int(bp)")
+            next_pc = Types.load_int(bp)
+            next_sp = bp + 4
             sender_sp_offset = FrameConstants.sender_sp_offset() * 4
-            next_sp = bp + sender_sp_offset
-        """
+            # sender_sp_offset=-4
+            #next_sp = bp + sender_sp_offset
+            next_bp = Types.load_long(sp + frame_size + 4)
+            next_pc = Types.load_long(sp + frame_size + 8)
+            next_sp = sp + frame_size + 12
+        # !!! __call__ oops The value of the register returned by the Python sniffer has unexpected size: 8 instead of 4. !!!
+        next_pc = next_pc.cast(gdb.lookup_type('unsigned long'))
+        next_sp = next_sp.cast(gdb.lookup_type('unsigned long'))
+        next_bp = next_bp.cast(gdb.lookup_type('unsigned long'))
         # create unwind info for this frame
         # t("frameid = OpenJDKFrameId(...)")
         frameid = OpenJDKFrameId(Types.to_voidp(next_sp),
@@ -1228,6 +1229,15 @@ class OpenJDKUnwinder(Unwinder):
         unwind_info.add_saved_register('pc', next_pc)
         unwind_info.add_saved_register('sp', next_sp)
         unwind_info.add_saved_register('r11', next_bp)
+        # Register 25 was not saved
+        # /* Every ARM frame unwinder can unwind the T bit of the CPSR, either
+        #    directly (from a signal frame or dummy frame) or by interpreting
+        #    the saved LR (from a prologue or DWARF frame).  So consult it and
+        #    trust the unwinders.  */
+        # Assume no Thumb mode.
+        cpsr = gdb.Value(int(0))
+        cpsr = cpsr.cast(gdb.lookup_type('unsigned long'))
+        unwind_info.add_saved_register('cpsr', cpsr)
         if _dump_frame:
             debug_write("next pc = 0x%x\n" % Types.as_long(next_pc))
             debug_write("next sp = 0x%x\n" % Types.as_long(next_sp))
