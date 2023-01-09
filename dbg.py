@@ -1191,7 +1191,7 @@ class OpenJDKUnwinder(Unwinder):
         x = Types.as_long(sp)
         # debug_write("@@ add %s cache entry for blob 0x%x at unwindercache[0x%x]\n" % (codetype, blob, x))
         self.unwindercache[x] = OpenJDKUnwinderCacheEntry(blob, sp, pc, bp, bcp, name, codetype)
-        if not codetype == "compiled":
+        if codetype != "compiled":
             # interpreter_frame_sender_sp_offset = FrameConstants.interpreter_frame_sender_sp_offset() * 4
             # interpreter frames store sender sp in slot 1
             # interpreter_frame_sender_sp_offset=-8
@@ -1201,6 +1201,7 @@ class OpenJDKUnwinder(Unwinder):
             # t("next_pc = Types.load_int(bp)")
             next_pc = Types.load_int(bp)
             next_sp = bp + 4
+        else:
             sender_sp_offset = FrameConstants.sender_sp_offset() * 4
             # sender_sp_offset=-4
             #next_sp = bp + sender_sp_offset
