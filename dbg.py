@@ -1223,7 +1223,7 @@ class OpenJDKUnwinder(Unwinder):
         # Java interpreted frame. it also saves us doing a redundant
         # stack read when the pending frame sits below a non-JITted
         # (C++) frame. n.b. if the current frame is a JITted frame
-        # (i.e. one that we have already unwound) then r11 will not be
+        # (i.e. one that we have already unwound) then rbp will not be
         # present. that's ok because the frame decorator can still
         # find the latest bcp value on the stack.
         bcp = pending_frame.read_register(self.register(pending_frame, 'bcp'))
@@ -1244,7 +1244,7 @@ class OpenJDKUnwinder(Unwinder):
             return None
         # if the blob is an nmethod then we use the frame
         # size to identify the frame base otherwise we
-        # use the value in r11
+        # use the value in rbp
         # t("name = str(blob['_name'])")
         name = str(blob['_name'])
         # blob name will be in format '0xHexDigits "AlphaNumSpaces"'
