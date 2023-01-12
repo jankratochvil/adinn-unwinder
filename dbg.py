@@ -1288,7 +1288,7 @@ class OpenJDKUnwinder(Unwinder):
             # next_sp is normally just 2 words below current bp
             # but for interpreted frames we need to skip locals
             # so we pull caller_sp from the frame
-        if codetype == "compiled":
+        if codetype == "interpreted":
             if self.is_arm32(pending_frame):
                 next_bp = Types.load_int(bp - Types.word_size())
                 next_pc = Types.load_int(bp)
@@ -1296,7 +1296,7 @@ class OpenJDKUnwinder(Unwinder):
             else:
                 interpreter_frame_sender_sp_offset = FrameConstants.interpreter_frame_sender_sp_offset() * Types.word_size()
                 # interpreter frames store sender sp in slot 1
-                next_sp = Types.load_int(bp + interpreter_frame_sender_sp_offset)
+                next_sp = Types.load_long(bp + interpreter_frame_sender_sp_offset)
         else:
             if self.is_arm32(pending_frame):
                 # sender_sp_offset = FrameConstants.sender_sp_offset() * Types.word_size()
