@@ -1288,24 +1288,23 @@ class OpenJDKUnwinder(Unwinder):
             # next_sp is normally just 2 words below current bp
             # but for interpreted frames we need to skip locals
             # so we pull caller_sp from the frame
-        if codetype == "interpreted":
-            if self.is_arm32(pending_frame):
-                next_bp = Types.load_int(bp - Types.word_size())
-                next_pc = Types.load_int(bp)
-                next_sp = bp + Types.word_size()
-            else:
+            if codetype == "interpreted":
                 interpreter_frame_sender_sp_offset = FrameConstants.interpreter_frame_sender_sp_offset() * Types.word_size()
                 # interpreter frames store sender sp in slot 1
                 next_sp = Types.load_long(bp + interpreter_frame_sender_sp_offset)
+            else:
+                sender_sp_offset = FrameConstants.sender_sp_offset() * Types.word_size()
+                next_sp = bp + sender_sp_offset
         else:
-            if self.is_arm32(pending_frame):
+            if codetype != "compiled":
+                next_bp = Types.load_long(bp - Types.word_size())
+                next_pc = Types.load_long(bp)
+                next_sp = bp + Types.word_size()
+            else:
                 # sender_sp_offset = FrameConstants.sender_sp_offset() * Types.word_size()
                 next_bp = Types.load_long(sp + frame_size + Types.word_size())
                 next_pc = Types.load_long(sp + frame_size + 2 * Types.word_size())
                 next_sp = sp + frame_size + 3 * Types.word_size()
-            else:
-                sender_sp_offset = FrameConstants.sender_sp_offset() * Types.word_size()
-                next_sp = bp + sender_sp_offset
         # !!! __call__ oops The value of the register returned by the Python sniffer has unexpected size: 8 instead of 4. !!!
         next_pc = next_pc.cast(gdb.lookup_type('unsigned long'))
         next_sp = next_sp.cast(gdb.lookup_type('unsigned long'))
